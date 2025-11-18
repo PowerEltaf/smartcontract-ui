@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethereum Betting Interface</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umin.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        h2 {
+            font-size: 18px;
+            margin-bottom: 12px;
+            color: #555;
+        }
+        button {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #0052cc;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .betting-option {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .betting-option label {
+            flex: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .betting-option input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .option-stats {
+            font-size: 12px;
+            color: #666;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .stat-card {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        .hidden {
+            display: none;
+        }
+        .split-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ethereum Betting Interface</h1>
+        
+        <div id="walletSection">
+            <button id="connectBtn" onclick="connectWallet()">Connect MetaMask</button>
+            <div id="walletStatus" class="hidden"></div>
+            <div id="networkWarning" class="hidden"></div>
+        </div>
+    </div>
+
+    <div class="container" id="contractSection" style="display: none;">
+        <h2>Contract Configuration</h2>
+        <input type="text" id="contractAddress" placeholder="Enter betting contract address (0x...)">
+        <button onclick="loadContract()">Load Contract</button>
+        <div id="contractStatus" class="hidden"></div>
+    </div>
+
+    <div class="container" id="bettingSection" style="display: none;">
+        <h2>Place Your Bet</h2>
+        <div id="bettingClosed" class="status warning hidden">
+            Betting is currently closed
+        </div>
+        <div id="optionsContainer"></div>
+        <div class="split-info" id="splitInfo"></div>
+        <input type="number" id="betAmount" placeholder="Total bet amount in ETH" step="0.001" min="0.001">
+        <button id="placeBetBtn" onclick="placeBet()">Place Bet</button>
+        <div id="betStatus" class="hidden"></div>
+    </div>
+
+    <div class="container" id="statsSection" style="display: none;">
+        <h2>Betting Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Pot</div>
+                <div class="stat-value" id="totalPot">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Betting Status</div>
+                <div class="stat-value" id="bettingStatus">-</div>
+            </div>
+        </div>
+        <h2 style="margin-top: 20px;">Outcome Stats</h2>
+        <div id="outcomeStats"></div>
+    </div>
+
+    <div class="container" id="userBetsSection" style="display: none;">
+        <h2>Your Bets</h2>
+        <div id="userBets"></div>
+    </div>
+
+    <script>
+        const CONTRACT_ABI = [
+            "function getOutcomes() view returns (string[])",
+            "function totalPerOutcome(uint256) view returns (uint256)",
+            "function getTotalPot() view returns (uint256)",
+            "function bettingOpen() view returns (bool)",
+            "function getUserBet(address, uint256) view returns (uint256)",
+            "function placeBet(uint256[]) payable"
+        ];
+
+        let provider;
+        let signer;
+        let contract;
+        let userAddress;
+        let outcomes = [];
+
+        async function connectWallet() {
+            try {
+                if (!window.ethereum) {
+                    showStatus('walletStatus', 'MetaMask not detected. Please install MetaMask.', 'error');
+                    return;
+                }
+
+                provider = new ethers.BrowserProvider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                userAddress = accounts[0];
+                signer = await provider.getSigner();
+
+                showStatus('walletStatus', `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`, 'success');
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('contractSection').style.display = 'block';
+
+                await checkNetwork();
+            } catch (error) {
+                showStatus('walletStatus', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkNetwork() {
+            const network = await provider.getNetwork();
+            const chainId = Number(network.chainId);
+            
+            if (chainId !== 11155111) {
+                showStatus('networkWarning', '⚠️ Warning: You are not on Sepolia testnet. Please switch to Sepolia (Chain ID: 11155111)', 'warning');
+            } else {
+                document.getElementById('networkWarning').classList.add('hidden');
+            }
+        }
+
+        async function loadContract() {
+            const address = document.getElementById('contractAddress').value.trim();
+            
+            if (!ethers.isAddress(address)) {
+                showStatus('contractStatus', 'Invalid contract address', 'error');
+                return;
+            }
+
+            try {
+                contract = new ethers.Contract(address, CONTRACT_ABI, signer);
+                
+                outcomes = await contract.getOutcomes();
+                const isOpen = await contract.bettingOpen();
+
+                showStatus('contractStatus', `Contract loaded: ${outcomes.length} betting options found`, 'success');
+                
+                document.getElementById('bettingSection').style.display = 'block';
+                document.getElementById('statsSection').style.display = 'block';
+                document.getElementById('userBetsSection').style.display = 'block';
+
+                if (!isOpen) {
+                    document.getElementById('bettingClosed').classList.remove('hidden');
+                    document.getElementById('placeBetBtn').disabled = true;
+                }
+
+                displayBettingOptions();
+                await updateStats();
+                await updateUserBets();
+            } catch (error) {
+                showStatus('contractStatus', `Error loading contract: ${error.message}`, 'error');
+            }
+        }
+
+        function displayBettingOptions() {
+            const container = document.getElementById('optionsContainer');
+            container.innerHTML = '';
+
+            outcomes.forEach((outcome, index) => {
+                const div = document.createElement('div');
+                div.className = 'betting-option';
+                div.innerHTML = `
+                    <label>
+                        <input type="checkbox" value="${index}" onchange="updateSplitInfo()">
+                        <span>${outcome}</span>
+                    </label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updateSplitInfo() {
+            const checkboxes = document.querySelectorAll('#optionsContainer input[type="checkbox"]:checked');
+            const count = checkboxes.length;
+            const info = document.getElementById('splitInfo');
+            
+            if (count > 0) {
+                info.textContent = `Selected ${count} option${count > 1 ? 's' : ''}. Your bet will be split equally: ${(1/count).toFixed(4)} ETH per option.`;
+            } else {
+                info.textContent = '';
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const totalPot = await contract.getTotalPot();
+                const isOpen = await contract.bettingOpen();
+
+                document.getElementById('totalPot').textContent = `${ethers.formatEther(totalPot)} ETH`;
+                document.getElementById('bettingStatus').textContent = isOpen ? 'Open' : 'Closed';
+                document.getElementById('bettingStatus').style.color = isOpen ? '#28a745' : '#dc3545';
+
+                const outcomeStatsContainer = document.getElementById('outcomeStats');
+                outcomeStatsContainer.innerHTML = '';
+
+                for (let i = 0; i < outcomes.length; i++) {
+                    const total = await contract.totalPerOutcome(i);
+                    const div = document.createElement('div');
+                    div.className = 'betting-option';
+                    div.innerHTML = `
+                        <span style="flex: 1;"><strong>${outcomes[i]}</strong></span>
+                        <span class="option-stats">${ethers.formatEther(total)} ETH</span>
+                    `;
+                    outcomeStatsContainer.appendChild(div);
+                }
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        async function updateUserBets() {
+            try {
+                const userBetsContainer = document.getElementById('userBets');
+                userBetsContainer.innerHTML = '';
+
+                let hasAnyBets = false;
+
+                for (let i = 0; i < outcomes.length; i++) {
+                    const userBet = await contract.getUserBet(userAddress, i);
+                    if (userBet > 0) {
+                        hasAnyBets = true;
+                        const div = document.createElement('div');
+                        div.className = 'betting-option';
+                        div.innerHTML = `
+                            <span style="flex: 1;">${outcomes[i]}</span>
+                            <span class="option-stats"><strong>${ethers.formatEther(userBet)} ETH</strong></span>
+                        `;
+                        userBetsContainer.appendChild(div);
+                    }
+                }
+
+                if (!hasAnyBets) {
+                    userBetsContainer.innerHTML = '<div class="status info">You have not placed any bets yet</div>';
+                }
+            } catch (error) {
+                console.error('Error updating user bets:', error);
+            }
+        }
+
+        async function placeBet() {
+            const checkboxes = document.querySelectorAll('#optionsContainer input[type="checkbox"]:checked');
+            const betAmount = document.getElementById('betAmount').value;
+
+            if (checkboxes.length === 0) {
+                showStatus('betStatus', 'Please select at least one betting option', 'error');
+                return;
+            }
+
+            if (!betAmount || parseFloat(betAmount) < 0.001 * checkboxes.length) {
+                showStatus('betStatus', `Minimum total bet: ${(0.001 * checkboxes.length).toFixed(3)} ETH (0.001 ETH per option)`, 'error');
+                return;
+            }
+
+            const outcomeIndices = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+            try {
+                document.getElementById('placeBetBtn').disabled = true;
+                showStatus('betStatus', 'Transaction pending...', 'info');
+
+                const tx = await contract.placeBet(outcomeIndices, {
+                    value: ethers.parseEther(betAmount)
+                });
+
+                showStatus('betStatus', 'Waiting for confirmation...', 'info');
+                await tx.wait();
+
+                showStatus('betStatus', 'Bet placed successfully!', 'success');
+                
+                // Reset form
+                checkboxes.forEach(cb => cb.checked = false);
+                document.getElementById('betAmount').value = '';
+                updateSplitInfo();
+
+                // Refresh stats
+                await updateStats();
+                await updateUserBets();
+
+                document.getElementById('placeBetBtn').disabled = false;
+            } catch (error) {
+                showStatus('betStatus', `Error: ${error.message}`, 'error');
+                document.getElementById('placeBetBtn').disabled = false;
+            }
+        }
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+            element.classList.remove('hidden');
+        }
+
+        // Listen for account changes
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length > 0) {
+                    window.location.reload();
+                }
+            });
+
+            window.ethereum.on('chainChanged', () => {
+                window.location.reload();
+            });
+        }
+    </script>
+</body>
+</html>

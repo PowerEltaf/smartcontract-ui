@@ -211,21 +211,22 @@
                     showStatus('walletStatus', 'MetaMask not detected. Please install MetaMask.', 'error');
                     return;
                 }
-
-                provider = new ethers.providers.Web3Provider(window.ethereum);
+        
+                provider = new ethers.BrowserProvider(window.ethereum);
                 const accounts = await provider.send("eth_requestAccounts", []);
                 userAddress = accounts[0];
-                signer = provider.getSigner();
-
+                signer = await provider.getSigner();
+        
                 showStatus('walletStatus', `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`, 'success');
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('contractSection').style.display = 'block';
-
+        
                 await checkNetwork();
             } catch (error) {
                 showStatus('walletStatus', `Error: ${error.message}`, 'error');
             }
         }
+        
 
         async function checkNetwork() {
             const network = await provider.getNetwork();

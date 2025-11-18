@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ethereum Betting Interface</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -212,10 +212,10 @@
                     return;
                 }
 
-                provider = new ethers.BrowserProvider(window.ethereum);
+                provider = new ethers.providers.Web3Provider(window.ethereum);
                 const accounts = await provider.send("eth_requestAccounts", []);
                 userAddress = accounts[0];
-                signer = await provider.getSigner();
+                signer = provider.getSigner();
 
                 showStatus('walletStatus', `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`, 'success');
                 document.getElementById('connectBtn').style.display = 'none';
@@ -229,7 +229,7 @@
 
         async function checkNetwork() {
             const network = await provider.getNetwork();
-            const chainId = Number(network.chainId);
+            const chainId = network.chainId;
             
             if (chainId !== 11155111) {
                 showStatus('networkWarning', '⚠️ Warning: You are not on Sepolia testnet. Please switch to Sepolia (Chain ID: 11155111)', 'warning');
